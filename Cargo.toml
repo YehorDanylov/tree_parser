@@ -1,0 +1,8 @@
+[package]
+name = "tree_parser"
+version = "0.1.0"
+edition = "2024"
+description = "A Rust project that parses arithmetic expressions into an Abstract Syntax Tree (AST) and evaluates them."
+readme = "README.md"
+
+[dependencies]
