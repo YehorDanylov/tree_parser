@@ -16,7 +16,7 @@ impl Expr {
         println!();
     }
 
-    /// Рекурсивний друк вузлів
+
     fn print_node(expr: &Expr, prefix: String, is_last: bool) {
         let connector = if is_last { "└── " } else { "├── " };
         print!("{}", prefix);
@@ -39,7 +39,7 @@ impl Expr {
         }
     }
 
-    /// Вивід виразу у звичайному інфіксному вигляді: (a + b)
+
     pub fn to_infix(&self) -> String {
         match self {
             Expr::Number(n) => format!("{}", n),
@@ -51,7 +51,6 @@ impl Expr {
 }
 
 
-// Додаємо Display щоб виводити числа та оператори красиво
 use std::fmt;
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
