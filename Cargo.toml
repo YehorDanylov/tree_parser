@@ -6,3 +6,5 @@ description = "A Rust project that parses arithmetic expressions into an Abstrac
 readme = "README.md"
 
 [dependencies]
+thiserror = "1.0"
+anyhow = "1.0"

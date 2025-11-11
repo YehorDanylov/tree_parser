@@ -1,21 +1,56 @@
+use std::fmt;
+use thiserror::Error;
+
+/// Абстрактне синтаксичне дерево (AST) для арифметичних виразів.
+///
+/// # Вузли AST
+/// - `Number(f64)` — число
+/// - `BinaryOp { op, left, right }` — бінарна операція (`+`, `-`, `*`, `/`)
 #[derive(Debug, PartialEq)]
 pub enum Expr {
+    /// Числовий вузол
     Number(f64),
+
+    /// Бінарна операція
     BinaryOp {
+        /// Оператор: '+', '-', '*', '/'
         op: char,
+        /// Ліве піддерево
         left: Box<Expr>,
+        /// Праве піддерево
         right: Box<Expr>,
     },
 }
 
-impl Expr {
+/// Можливі помилки парсингу
+#[derive(Error, Debug)]
+pub enum ParseError {
+    /// Неочікуваний кінець вводу
+    #[error("Unexpected end of input")]
+    UnexpectedEnd,
 
+    /// Неочікуваний токен
+    #[error("Unexpected token: {0}")]
+    UnexpectedToken(String),
+
+    /// Відсутня закриваюча дужка
+    #[error("Missing closing parenthesis")]
+    MissingClosingParenthesis,
+}
+
+impl Expr {
+    /// Виводить дерево AST у консоль
+    ///
+    /// # Приклад
+    /// ```
+    /// let expr = tree_parser::parse_expression("2 + 3 * 4").unwrap();
+    /// expr.print_tree();
+    /// ```
     pub fn print_tree(&self) {
         println!("\nExpression: {}\n", self.to_infix());
         Self::print_node(self, "".to_string(), true);
         println!();
     }
-
 
     fn print_node(expr: &Expr, prefix: String, is_last: bool) {
         let connector = if is_last { "└── " } else { "├── " };
@@ -26,9 +61,7 @@ impl Expr {
             Expr::Number(n) => println!("{}", n),
             Expr::BinaryOp { op, left, right } => {
                 println!("{}", op);
-
                 let new_prefix = prefix + if is_last { "    " } else { "│   " };
-
                 let children = vec![left.as_ref(), right.as_ref()];
 
                 for (i, child) in children.iter().enumerate() {
@@ -39,7 +72,13 @@ impl Expr {
         }
     }
 
-
+    /// Повертає рядкове представлення виразу у звичайному інфіксному вигляді
+    ///
+    /// # Приклад
+    /// ```
+    /// let expr = tree_parser::parse_expression("2 + 3").unwrap();
+    /// assert_eq!(expr.to_infix(), "(2 + 3)");
+    /// ```
     pub fn to_infix(&self) -> String {
         match self {
             Expr::Number(n) => format!("{}", n),
@@ -50,8 +89,6 @@ impl Expr {
     }
 }
 
-
-use std::fmt;
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -61,13 +98,26 @@ impl fmt::Display for Expr {
     }
 }
 
-
-pub fn parse_expression(input: &str) -> Result<Expr, String> {
+/// Парсить арифметичний вираз у рядку та повертає AST
+///
+/// # Граматика
+///
+/// Expr   = Term { ("+" | "-") Term } ;
+/// Term   = Factor { ("*" | "/") Factor } ;
+/// Factor = Number | "(" Expr ")" ;
+/// Number = digit { digit } ;
+///
+/// # Приклад
+/// ```
+/// let expr = tree_parser::parse_expression("3 + 5 * (2 - 8) / 4").unwrap();
+/// ```
+pub fn parse_expression(input: &str) -> Result<Expr, ParseError> {
     let mut tokens = tokenize(input)?;
     parse_expr(&mut tokens)
 }
 
-fn tokenize(input: &str) -> Result<Vec<String>, String> {
+/// Токенізація рядка у вектор токенів
+fn tokenize(input: &str) -> Result<Vec<String>, ParseError> {
     let mut tokens = Vec::new();
     let mut number = String::new();
 
@@ -84,6 +134,7 @@ fn tokenize(input: &str) -> Result<Vec<String>, String> {
             tokens.push(ch.to_string());
         }
     }
+
     if !number.is_empty() {
         tokens.push(number);
     }
@@ -91,17 +142,24 @@ fn tokenize(input: &str) -> Result<Vec<String>, String> {
     Ok(tokens)
 }
 
-fn parse_expr(tokens: &mut Vec<String>) -> Result<Expr, String> {
+/// Реалізація правила граматики Expr = Term { ("+" | "-") Term }
+fn parse_expr(tokens: &mut Vec<String>) -> Result<Expr, ParseError> {
     parse_binary_op(tokens, parse_term, &['+', '-'])
 }
 
-fn parse_term(tokens: &mut Vec<String>) -> Result<Expr, String> {
+/// Реалізація правила граматики Term = Factor { ("*" | "/") Factor }
+fn parse_term(tokens: &mut Vec<String>) -> Result<Expr, ParseError> {
     parse_binary_op(tokens, parse_factor, &['*', '/'])
 }
 
-fn parse_binary_op<F>(tokens: &mut Vec<String>, subparser: F, ops: &[char]) -> Result<Expr, String>
+/// Парсинг бінарної операції
+fn parse_binary_op<F>(
+    tokens: &mut Vec<String>,
+    subparser: F,
+    ops: &[char],
+) -> Result<Expr, ParseError>
 where
-    F: Fn(&mut Vec<String>) -> Result<Expr, String>,
+    F: Fn(&mut Vec<String>) -> Result<Expr, ParseError>,
 {
     let mut left = subparser(tokens)?;
     while let Some(op) = tokens.first().and_then(|s| s.chars().next()) {
@@ -120,26 +178,34 @@ where
     Ok(left)
 }
 
-fn parse_factor(tokens: &mut Vec<String>) -> Result<Expr, String> {
+/// Реалізація правила граматики Factor = Number | "(" Expr ")"
+fn parse_factor(tokens: &mut Vec<String>) -> Result<Expr, ParseError> {
     if tokens.is_empty() {
-        return Err("Unexpected end".into());
+        return Err(ParseError::UnexpectedEnd);
     }
 
     let token = tokens.remove(0);
 
     if token == "(" {
         let expr = parse_expr(tokens)?;
-        if tokens.remove(0) != ")" {
-            return Err("Missing ')'".into());
+        if tokens.is_empty() || tokens.remove(0) != ")" {
+            return Err(ParseError::MissingClosingParenthesis);
         }
         Ok(expr)
     } else if let Ok(num) = token.parse::<f64>() {
         Ok(Expr::Number(num))
     } else {
-        Err(format!("Unexpected token: {}", token))
+        Err(ParseError::UnexpectedToken(token))
     }
 }
 
+/// Обчислює значення AST
+///
+/// # Приклад
+/// ```
+/// let expr = tree_parser::parse_expression("3 + 5").unwrap();
+/// assert_eq!(tree_parser::evaluate(&expr), 8.0);
+/// ```
 pub fn evaluate(expr: &Expr) -> f64 {
     match expr {
         Expr::Number(n) => *n,
